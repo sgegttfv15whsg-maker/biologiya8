@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
-import { TOPICS } from '../../data/curriculumData';
+import { GRADE_COURSES, TOPICS } from '../../data/curriculumData';
 import { GradeNumber } from '../../types';
 import {
   BookOpen,
@@ -11,7 +11,11 @@ import {
   Heart,
   ChevronRight,
   Target,
-  Bookmark
+  Bookmark,
+  Bot,
+  Gamepad2,
+  FileCheck2,
+  GraduationCap
 } from 'lucide-react';
 
 export const TextbookView: React.FC = () => {
@@ -20,66 +24,86 @@ export const TextbookView: React.FC = () => {
     setSelectedGrade,
     userProfile,
     openTopic,
-    toggleFavoriteTopic
+    openTest,
+    openGame,
+    toggleFavoriteTopic,
+    setIsBioBotOpen,
+    setBioBotTopicContext
   } = useApp();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterOnlyFavorites, setFilterOnlyFavorites] = useState(false);
 
+  // Active course strictly for the selected grade
+  const activeCourse = GRADE_COURSES.find(c => c.gradeNumber === selectedGrade) || GRADE_COURSES[0];
   const gradeTopics = TOPICS.filter(t => t.grade === selectedGrade);
   const completedInGrade = gradeTopics.filter(t => userProfile.completedTopicIds.includes(t.id)).length;
   const gradeProgress = gradeTopics.length > 0 ? Math.round((completedInGrade / gradeTopics.length) * 100) : 0;
 
-  // Filter topics
-  const filteredTopics = gradeTopics.filter(t => {
-    const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.chapterTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.summary.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesFav = !filterOnlyFavorites || userProfile.favoriteTopicIds.includes(t.id);
-    return matchesSearch && matchesFav;
-  });
+  // Grade badge styling
+  const gradeBadges: { [grade: number]: { color: string; border: string; bg: string; text: string; icon: string } } = {
+    8: { color: 'emerald', border: 'border-emerald-500', bg: 'bg-emerald-600', text: 'text-emerald-600 dark:text-emerald-400', icon: '🧪' },
+    9: { color: 'blue', border: 'border-blue-500', bg: 'bg-blue-600', text: 'text-blue-600 dark:text-blue-400', icon: '🧬' },
+    10: { color: 'purple', border: 'border-purple-500', bg: 'bg-purple-600', text: 'text-purple-600 dark:text-purple-400', icon: '🔬' },
+    11: { color: 'amber', border: 'border-amber-500', bg: 'bg-amber-600', text: 'text-amber-600 dark:text-amber-400', icon: '🧠' },
+  };
 
-  // Group topics by chapter
-  const chaptersMap: { [chap: string]: typeof TOPICS } = {};
-  filteredTopics.forEach(t => {
-    if (!chaptersMap[t.chapterTitle]) {
-      chaptersMap[t.chapterTitle] = [];
-    }
-    chaptersMap[t.chapterTitle].push(t);
-  });
+  const currentBadge = gradeBadges[selectedGrade] || gradeBadges[8];
+
+  // Filter topics within the active course's chapters
+  const filteredChapters = activeCourse.chapters.map(chapter => {
+    const lessons = chapter.lessons.filter(t => {
+      const matchesSearch = t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.summary.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        chapter.title.toLowerCase().includes(searchTerm.toLowerCase());
+      const matchesFav = !filterOnlyFavorites || userProfile.favoriteTopicIds.includes(t.id);
+      return matchesSearch && matchesFav;
+    });
+    return {
+      ...chapter,
+      lessons
+    };
+  }).filter(chap => chap.lessons.length > 0);
+
+  const handleAskBioBotForTopic = (topicTitle: string) => {
+    setBioBotTopicContext(`${selectedGrade}-sinf: ${topicTitle}`);
+    setIsBioBotOpen(true);
+  };
 
   return (
-    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 animate-fade-in">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6 sm:py-10 animate-fade-in space-y-8">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
         <div>
-          <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs uppercase tracking-wider">
+          <div className="flex items-center gap-2 font-bold text-xs uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
             <BookOpen className="w-4 h-4" />
-            Rasmiy Maktab Darsligi
+            Rasmiy Maktab Darsliklari (O'zbekiston)
           </div>
-          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">
-            📚 Biologiya Darsliklari
+          <h1 className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white mt-1">
+            {currentBadge.icon} {activeCourse.gradeName}
           </h1>
           <p className="text-slate-500 dark:text-slate-400 text-sm mt-1">
-            O'zbekiston umumta'lim maktablarining 8-, 9-, 10- va 11-sinf darsliklari asosidagi mavzular
+            {activeCourse.subtitle}
           </p>
         </div>
 
-        {/* Grade Selector Tabs */}
-        <div className="flex items-center p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl self-start md:self-auto border border-slate-200 dark:border-slate-700">
+        {/* 4 Distinct Grade Selector Tabs */}
+        <div className="flex items-center p-1.5 bg-slate-100 dark:bg-slate-800/90 rounded-2xl self-start md:self-auto border border-slate-200 dark:border-slate-700/80 shadow-inner">
           {([8, 9, 10, 11] as GradeNumber[]).map(grade => {
             const isActive = selectedGrade === grade;
+            const b = gradeBadges[grade];
             return (
               <button
                 key={grade}
                 onClick={() => setSelectedGrade(grade)}
-                className={`px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all ${
+                className={`px-3.5 sm:px-4 py-2 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
                   isActive
-                    ? 'bg-emerald-600 text-white shadow-md'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                    ? `${b.bg} text-white shadow-md scale-102`
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-200/60 dark:hover:bg-slate-700/50'
                 }`}
               >
-                {grade}-sinf
+                <span>{b.icon}</span>
+                <span>{grade}-sinf</span>
               </button>
             );
           })}
@@ -87,16 +111,21 @@ export const TextbookView: React.FC = () => {
       </div>
 
       {/* Progress & Search Banner */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+      <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
         {/* Progress Card */}
-        <div className="md:col-span-6 bg-gradient-to-r from-emerald-600 to-teal-600 text-white rounded-3xl p-5 sm:p-6 shadow-md">
+        <div className="md:col-span-6 bg-gradient-to-r from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-5 sm:p-6 shadow-md border border-emerald-500/20">
           <div className="flex items-center justify-between text-xs font-semibold mb-2">
-            <span>{selectedGrade}-sinf bo'yicha umumiy progress</span>
-            <span className="font-bold text-emerald-200">{completedInGrade} / {gradeTopics.length} mavzu ({gradeProgress}%)</span>
+            <span className="flex items-center gap-1.5">
+              <GraduationCap className="w-4 h-4 text-emerald-400" />
+              {selectedGrade}-sinf umumiy o'zlashtirish darajasi
+            </span>
+            <span className="font-bold text-emerald-300">
+              {completedInGrade} / {gradeTopics.length} dars ({gradeProgress}%)
+            </span>
           </div>
           <div className="w-full bg-white/20 rounded-full h-3 overflow-hidden p-0.5">
             <div
-              className="bg-white rounded-full h-2 transition-all duration-500"
+              className="bg-emerald-500 rounded-full h-2 transition-all duration-500"
               style={{ width: `${gradeProgress}%` }}
             />
           </div>
@@ -108,7 +137,7 @@ export const TextbookView: React.FC = () => {
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Darslik mavzularidan qidiring..."
+              placeholder={`${selectedGrade}-sinf mavzulari bo'yicha qidiring...`}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200 placeholder-slate-400 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
@@ -128,9 +157,9 @@ export const TextbookView: React.FC = () => {
         </div>
       </div>
 
-      {/* Chapters & Topics List */}
-      <div className="mt-8 space-y-10">
-        {Object.keys(chaptersMap).length === 0 ? (
+      {/* Chapters & Topics List (strictly for the chosen grade) */}
+      <div className="space-y-10">
+        {filteredChapters.length === 0 ? (
           <div className="text-center py-16 bg-white dark:bg-slate-900 rounded-3xl border border-slate-200 dark:border-slate-800 p-8">
             <span className="text-4xl">🔍</span>
             <h3 className="text-lg font-bold text-slate-800 dark:text-slate-200 mt-2">
@@ -141,22 +170,29 @@ export const TextbookView: React.FC = () => {
             </p>
           </div>
         ) : (
-          Object.entries(chaptersMap).map(([chapterTitle, topicsList]) => (
-            <div key={chapterTitle} className="space-y-4">
+          filteredChapters.map(chapter => (
+            <div key={chapter.id} className="space-y-4">
               {/* Chapter Header */}
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-6 bg-emerald-500 rounded-full" />
-                <h2 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                  {chapterTitle}
-                </h2>
-                <span className="text-xs px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-semibold ml-auto">
-                  {topicsList.length} ta mavzu
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">{chapter.icon || '📖'}</span>
+                <div>
+                  <h2 className="text-xl font-bold text-slate-900 dark:text-white">
+                    {chapter.title}
+                  </h2>
+                  {chapter.description && (
+                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                      {chapter.description}
+                    </p>
+                  )}
+                </div>
+                <span className="text-xs px-3 py-1 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold ml-auto">
+                  {chapter.lessons.length} ta mavzu
                 </span>
               </div>
 
               {/* Topics Grid */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {topicsList.map(topic => {
+                {chapter.lessons.map(topic => {
                   const isCompleted = userProfile.completedTopicIds.includes(topic.id);
                   const isFavorite = userProfile.favoriteTopicIds.includes(topic.id);
 
@@ -169,7 +205,7 @@ export const TextbookView: React.FC = () => {
                         {/* Card Top Row */}
                         <div className="flex items-start justify-between gap-3">
                           <div className="flex items-center gap-3">
-                            <span className="text-3xl p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-center">
+                            <span className="text-3xl p-2.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-800/40 flex items-center justify-center flex-shrink-0">
                               {topic.icon}
                             </span>
                             <div>
@@ -210,7 +246,7 @@ export const TextbookView: React.FC = () => {
                         </p>
 
                         {/* Goals Snippet */}
-                        {topic.learningGoals.length > 0 && (
+                        {topic.learningGoals && topic.learningGoals.length > 0 && (
                           <div className="mt-3 text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                             <Target className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
                             <span className="truncate">{topic.learningGoals[0]}</span>
@@ -218,8 +254,8 @@ export const TextbookView: React.FC = () => {
                         )}
                       </div>
 
-                      {/* Card Bottom Row */}
-                      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between">
+                      {/* Card Bottom Row: Actions (Dars, Test, Game, AI) */}
+                      <div className="mt-5 pt-4 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 flex-wrap">
                         {isCompleted ? (
                           <span className="inline-flex items-center gap-1 text-xs font-bold text-emerald-600 dark:text-emerald-400">
                             <CheckCircle2 className="w-4 h-4" />
@@ -227,17 +263,29 @@ export const TextbookView: React.FC = () => {
                           </span>
                         ) : (
                           <span className="text-xs font-medium text-slate-400">
-                            O'qilmagan
+                            Yangi mavzu
                           </span>
                         )}
 
-                        <button
-                          onClick={() => openTopic(topic.id)}
-                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white dark:bg-slate-800 dark:hover:bg-emerald-600 font-bold text-xs transition-colors shadow-sm"
-                        >
-                          {isCompleted ? "Qayta o'qish" : "Darsni boshlash"}
-                          <ChevronRight className="w-3.5 h-3.5" />
-                        </button>
+                        <div className="flex items-center gap-1.5">
+                          {/* AI Quick Help */}
+                          <button
+                            onClick={() => handleAskBioBotForTopic(topic.title)}
+                            className="p-2 rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-emerald-50 text-slate-600 dark:text-slate-300 hover:text-emerald-600 transition-colors"
+                            title="BioBot orqali tushuntirish"
+                          >
+                            <Bot className="w-4 h-4" />
+                          </button>
+
+                          {/* Start Topic */}
+                          <button
+                            onClick={() => openTopic(topic.id)}
+                            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-slate-900 hover:bg-emerald-600 text-white dark:bg-slate-800 dark:hover:bg-emerald-600 font-bold text-xs transition-colors shadow-sm"
+                          >
+                            {isCompleted ? "Qayta o'qish" : "Darsni boshlash"}
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );

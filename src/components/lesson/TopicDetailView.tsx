@@ -16,9 +16,12 @@ import {
   Play,
   BookOpen,
   ChevronRight,
+  ChevronLeft,
   ZoomIn,
   Gamepad2,
-  Lightbulb
+  Lightbulb,
+  FileCheck2,
+  HelpCircle
 } from 'lucide-react';
 
 export const TopicDetailView: React.FC = () => {
@@ -33,12 +36,17 @@ export const TopicDetailView: React.FC = () => {
     openTest,
     setIsBioBotOpen,
     setBioBotTopicContext,
-    customTopicImages
+    customTopicImages,
+    selectedGrade
   } = useApp();
 
   const [isImageModalOpen, setIsImageModalOpen] = useState(false);
 
-  const currentTopic = TOPICS.find(t => t.id === activeTopicId) || TOPICS[0];
+  // Find active topic or fallback to first of current grade
+  const currentTopic = TOPICS.find(t => t.id === activeTopicId) ||
+    TOPICS.find(t => t.grade === selectedGrade) ||
+    TOPICS[0];
+
   const isCompleted = userProfile.completedTopicIds.includes(currentTopic.id);
   const isFavorite = userProfile.favoriteTopicIds.includes(currentTopic.id);
 
@@ -48,31 +56,52 @@ export const TopicDetailView: React.FC = () => {
   const activeImageCaption = customImg?.caption || currentTopic.imageCaption || currentTopic.summary;
   const activeImageAlt = customImg?.altText || currentTopic.imageAlt || currentTopic.title;
 
-  // Next topic in line
-  const currentIndex = TOPICS.findIndex(t => t.id === currentTopic.id);
-  const nextTopic = currentIndex !== -1 && currentIndex + 1 < TOPICS.length ? TOPICS[currentIndex + 1] : null;
+  // Filter topics of the SAME grade only (guarantees one grade never bleeds into another)
+  const sameGradeTopics = TOPICS.filter(t => t.grade === currentTopic.grade);
+  const currentIndex = sameGradeTopics.findIndex(t => t.id === currentTopic.id);
+  const prevTopic = currentIndex > 0 ? sameGradeTopics[currentIndex - 1] : null;
+  const nextTopic = currentIndex !== -1 && currentIndex + 1 < sameGradeTopics.length ? sameGradeTopics[currentIndex + 1] : null;
 
-  // Map relevant games to the topic (Section 55 in prompt)
+  // Connected games for this lesson
   const getTopicGames = () => {
-    if (currentTopic.id.includes('cell') || currentTopic.title.toLowerCase().includes('hujayra')) {
-      return GAME_CATALOG.filter(g => ['cell_builder', 'guess_picture', 'memory_game', 'microscope'].includes(g.id));
+    if (currentTopic.games && currentTopic.games.length > 0) {
+      return currentTopic.games.map(g => {
+        const fullGame = GAME_CATALOG.find(cat => cat.id === g.id);
+        return fullGame || { id: g.id, title: g.title, icon: g.icon, xpReward: g.xpReward, description: 'Mavzuni mustahkamlash o\'yini', category: 'quiz' as const };
+      });
     }
-    if (currentTopic.id.includes('heart') || currentTopic.title.toLowerCase().includes('yurak')) {
-      return GAME_CATALOG.filter(g => ['place_organs', 'bio_race', 'rapid_fire'].includes(g.id));
+
+    const tLower = currentTopic.title.toLowerCase();
+    if (tLower.includes('cell') || tLower.includes('hujayra') || tLower.includes('organoid')) {
+      return GAME_CATALOG.filter(g => ['cell_builder', 'guess_picture', 'memory_game'].includes(g.id));
     }
-    if (currentTopic.title.toLowerCase().includes('dna') || currentTopic.title.toLowerCase().includes('dnk') || currentTopic.title.toLowerCase().includes('genetika') || currentTopic.title.toLowerCase().includes('mendel')) {
+    if (tLower.includes('yurak') || tLower.includes('qon') || tLower.includes('organ')) {
+      return GAME_CATALOG.filter(g => ['place_organs', 'rapid_fire', 'detective'].includes(g.id));
+    }
+    if (tLower.includes('dna') || tLower.includes('dnk') || tLower.includes('genetika') || tLower.includes('mendel')) {
       return GAME_CATALOG.filter(g => ['build_dna', 'genetics_expert', 'match_pairs'].includes(g.id));
     }
-    if (currentTopic.title.toLowerCase().includes('fotosintez') || currentTopic.title.toLowerCase().includes('o\'simlik')) {
-      return GAME_CATALOG.filter(g => ['plant_master', 'virtual_lab', 'explore_plant'].includes(g.id));
+    if (tLower.includes('fotosintez') || tLower.includes('o\'simlik') || tLower.includes('metabolizm')) {
+      return GAME_CATALOG.filter(g => ['virtual_lab', 'explore_plant', 'rapid_fire'].includes(g.id));
     }
-    if (currentTopic.title.toLowerCase().includes('ekologiya') || currentTopic.title.toLowerCase().includes('biosfera')) {
-      return GAME_CATALOG.filter(g => ['ecosystem_builder', 'detective', 'boss_battle'].includes(g.id));
+    if (tLower.includes('ekologiya') || tLower.includes('biosfera') || tLower.includes('darvin')) {
+      return GAME_CATALOG.filter(g => ['ecosystem_builder', 'word_search', 'boss_battle'].includes(g.id));
     }
     return GAME_CATALOG.slice(0, 3);
   };
 
   const topicGames = getTopicGames();
+
+  // Connected test for this lesson
+  const getTopicTestId = () => {
+    if (currentTopic.tests && currentTopic.tests.length > 0) {
+      return currentTopic.tests[0].id;
+    }
+    if (currentTopic.grade === 8) return 'test-8-cell';
+    if (currentTopic.grade === 9) return 'test-9-organelles';
+    if (currentTopic.grade === 10) return 'test-10-mendel';
+    return 'test-11-darwin';
+  };
 
   const handleFinishLesson = () => {
     if (!isCompleted) {
@@ -80,14 +109,20 @@ export const TopicDetailView: React.FC = () => {
     }
   };
 
-  const handleAskBioBot = () => {
+  const handleAskBioBot = (initialPrompt?: string) => {
     setBioBotTopicContext(`${currentTopic.grade}-sinf: ${currentTopic.title}`);
     setIsBioBotOpen(true);
   };
 
-  // Fallback high-fidelity SVG illustration for the topic
+  const handleStartTopicTest = () => {
+    const testId = getTopicTestId();
+    openTest(testId);
+  };
+
+  // High-fidelity scientific SVG illustration fallback
   const renderTopicIllustration = () => {
-    if (currentTopic.title.toLowerCase().includes('yurak') || currentTopic.id.includes('heart')) {
+    const tLower = currentTopic.title.toLowerCase();
+    if (tLower.includes('yurak') || currentTopic.id.includes('heart')) {
       return (
         <svg viewBox="0 0 320 240" className="w-full h-56 max-w-sm mx-auto">
           <defs>
@@ -100,103 +135,97 @@ export const TopicDetailView: React.FC = () => {
               <stop offset="100%" stopColor="#1d4ed8" />
             </linearGradient>
           </defs>
-          <path d="M130,90 C130,30 200,20 200,80 L180,95 C180,55 145,55 145,90 Z" fill="url(#artGrad)" />
-          <rect x="80" y="30" width="30" height="70" rx="8" fill="url(#venGrad)" />
-          <path d="M70,95 C50,110 50,160 90,175 C105,175 115,150 115,120 Z" fill="url(#venGrad)" stroke="#1e3a8a" strokeWidth="2" />
-          <path d="M190,95 C210,110 210,150 190,170 C175,170 165,145 165,115 Z" fill="url(#artGrad)" stroke="#7f1d1d" strokeWidth="2" />
-          <path d="M90,170 C90,215 125,240 140,245 L140,165 Z" fill="#2563eb" stroke="#1e40af" strokeWidth="2" />
-          <path d="M140,165 L140,245 C170,240 210,205 200,160 Z" fill="url(#artGrad)" stroke="#991b1b" strokeWidth="3" />
+          <path d="M160 40 C140 20, 90 20, 80 70 C70 120, 140 180, 160 210 C180 180, 250 120, 240 70 C230 20, 180 20, 160 40 Z" fill="url(#artGrad)" />
+          <path d="M120 40 Q130 15, 150 10 Q170 10, 180 40" fill="none" stroke="#f87171" strokeWidth="18" strokeLinecap="round" />
+          <path d="M190 25 Q210 25, 220 50" fill="none" stroke="url(#venGrad)" strokeWidth="14" strokeLinecap="round" />
+          <text x="160" y="125" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="13">INSO YURAGI</text>
+          <text x="160" y="145" textAnchor="middle" fill="#fecaca" fontSize="10">4 Kamerali Nasos</text>
         </svg>
       );
     }
-
-    if (currentTopic.title.toLowerCase().includes('dnk') || currentTopic.title.toLowerCase().includes('genetika') || currentTopic.title.toLowerCase().includes('mendel')) {
+    if (tLower.includes('dnk') || tLower.includes('genetika') || currentTopic.grade === 10) {
       return (
-        <svg viewBox="0 0 320 240" className="w-full h-56 max-w-sm mx-auto">
-          <g transform="translate(60, 20)">
-            {[30, 65, 100, 135, 170].map((y, idx) => {
-              const spread = Math.sin((y / 200) * Math.PI * 3.5) * 50;
-              return (
-                <g key={y}>
-                  <line x1={100 - spread} y1={y} x2={100} y2={y} stroke={idx % 2 === 0 ? "#ef4444" : "#10b981"} strokeWidth="5" strokeLinecap="round" />
-                  <line x1={100} y1={y} x2={100 + spread} y2={y} stroke={idx % 2 === 0 ? "#f59e0b" : "#3b82f6"} strokeWidth="5" strokeLinecap="round" />
-                </g>
-              );
-            })}
-            <path d="M 50,20 C 80,55 150,95 150,135 C 150,175 60,200 60,210" fill="none" stroke="#0ea5e9" strokeWidth="8" strokeLinecap="round" />
-            <path d="M 150,20 C 120,55 50,95 50,135 C 50,175 140,200 140,210" fill="none" stroke="#8b5cf6" strokeWidth="8" strokeLinecap="round" />
-          </g>
+        <svg viewBox="0 0 320 200" className="w-full h-52 max-w-sm mx-auto">
+          <defs>
+            <linearGradient id="dnaGrad1" x1="0%" y1="0%" x2="100%" y2="0%">
+              <stop offset="0%" stopColor="#3b82f6" />
+              <stop offset="100%" stopColor="#10b981" />
+            </linearGradient>
+          </defs>
+          <path d="M40 100 Q80 30, 120 100 T200 100 T280 100" fill="none" stroke="url(#dnaGrad1)" strokeWidth="6" />
+          <path d="M40 100 Q80 170, 120 100 T200 100 T280 100" fill="none" stroke="#8b5cf6" strokeWidth="6" />
+          {[60, 80, 100, 140, 160, 180, 220, 240, 260].map((x, i) => (
+            <line key={i} x1={x} y1="65" x2={x} y2="135" stroke="#f59e0b" strokeWidth="3" strokeDasharray="3 3" />
+          ))}
+          <text x="160" y="175" textAnchor="middle" fill="#64748b" fontWeight="bold" fontSize="12">DNK Qo'sh Spirali (A=T, G≡C)</text>
         </svg>
       );
     }
-
-    // Default cell / biology graphic
+    // Default Cell / Biology illustration
     return (
-      <svg viewBox="0 0 320 240" className="w-full h-56 max-w-sm mx-auto">
-        <path d="M40,120 C30,60 100,30 180,40 C250,50 280,100 270,160 C260,220 200,245 120,235 C50,225 45,180 40,120 Z" fill="#fed7aa" stroke="#ea580c" strokeWidth="4" opacity="0.9" />
-        <circle cx="150" cy="130" r="38" fill="#7e22ce" stroke="#581c87" strokeWidth="2" />
-        <circle cx="140" cy="120" r="14" fill="#3b0764" />
-        <rect x="70" y="160" width="38" height="18" rx="9" fill="#ef4444" stroke="#991b1b" strokeWidth="2" />
-        <rect x="200" y="80" width="34" height="16" rx="8" fill="#ef4444" stroke="#991b1b" strokeWidth="2" />
+      <svg viewBox="0 0 320 220" className="w-full h-52 max-w-sm mx-auto">
+        <circle cx="160" cy="110" r="85" fill="#ecfdf5" stroke="#10b981" strokeWidth="5" />
+        <circle cx="160" cy="110" r="32" fill="#d1fae5" stroke="#059669" strokeWidth="3" />
+        <ellipse cx="115" cy="80" rx="14" ry="8" fill="#fde68a" stroke="#d97706" strokeWidth="2" />
+        <ellipse cx="205" cy="140" rx="14" ry="8" fill="#fde68a" stroke="#d97706" strokeWidth="2" />
+        <circle cx="160" cy="110" r="12" fill="#047857" />
+        <text x="160" y="114" textAnchor="middle" fill="#ffffff" fontWeight="bold" fontSize="10">Yadro</text>
+        <text x="160" y="185" textAnchor="middle" fill="#065f46" fontWeight="bold" fontSize="12">Eukariot Hujayra</text>
       </svg>
     );
   };
 
   return (
-    <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6 sm:py-10 animate-fade-in space-y-8">
-      {/* Top Navigation & Controls */}
-      <div className="flex items-center justify-between pb-6 border-b border-slate-200 dark:border-slate-800">
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 sm:py-10 animate-fade-in space-y-8">
+      {/* Top Navigation Row */}
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <button
           onClick={() => setActiveView('textbook')}
-          className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
+          className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 dark:text-slate-400 hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Darslik mundarijasiga qaytish
+          {currentTopic.grade}-sinf darsligiga qaytish
         </button>
 
         <div className="flex items-center gap-2">
-          {/* Favorite Toggle */}
+          {/* Favorite Button */}
           <button
             onClick={() => toggleFavoriteTopic(currentTopic.id)}
-            className={`p-2.5 rounded-xl border transition-all ${
+            className={`p-2.5 rounded-2xl border transition-all flex items-center gap-1.5 text-xs font-bold ${
               isFavorite
-                ? 'bg-rose-50 dark:bg-rose-950/50 border-rose-300 dark:border-rose-800 text-rose-600'
-                : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:text-rose-500'
+                ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-500 border-rose-200 dark:border-rose-900 shadow-sm'
+                : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:text-rose-500'
             }`}
-            title="Sevimlilarga qo'shish"
           >
             <Heart className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
+            <span className="hidden sm:inline">{isFavorite ? "Saqlangan" : "Saqlash"}</span>
           </button>
 
-          {/* Ask BioBot */}
+          {/* AI Ustoz Button */}
           <button
-            onClick={handleAskBioBot}
-            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-medium text-xs sm:text-sm shadow-md hover:shadow-emerald-500/20 transition-all hover:scale-102"
+            onClick={() => handleAskBioBot()}
+            className="px-3.5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-2 shadow-sm transition-all"
           >
             <Bot className="w-4 h-4" />
-            BioBotdan so'rash
+            AI Ustozdan so'rang
           </button>
         </div>
       </div>
 
-      {/* Lesson Header Card */}
-      <div className="bg-gradient-to-br from-emerald-900 via-teal-900 to-slate-900 text-white rounded-3xl p-6 sm:p-10 shadow-xl relative overflow-hidden">
-        <div className="absolute -right-10 -bottom-10 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute right-12 top-8 text-8xl opacity-10 select-none">
-          {currentTopic.icon}
-        </div>
-
-        <div className="relative z-10 max-w-2xl">
-          <div className="flex flex-wrap items-center gap-2 mb-3">
-            <span className="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs font-bold uppercase tracking-wider border border-emerald-500/30">
-              {currentTopic.grade}-sinf Biologiya
+      {/* Hero Banner with Topic Title */}
+      <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 border border-emerald-500/20 shadow-xl relative overflow-hidden">
+        <div className="absolute right-0 top-0 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="relative z-10">
+          <div className="flex items-center gap-2.5 flex-wrap mb-3">
+            <span className="px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-extrabold text-xs">
+              🧪 {currentTopic.grade}-SINF BIOLOGIYA
             </span>
-            <span className="flex items-center gap-1 text-slate-300 text-xs font-medium">
+            <span className="px-3 py-1 rounded-full bg-white/10 text-slate-300 font-medium text-xs flex items-center gap-1">
               <Clock className="w-3.5 h-3.5" />
               {currentTopic.estimatedMinutes} daqiqa
             </span>
             {isCompleted && (
-              <span className="flex items-center gap-1 text-emerald-300 text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-500/40">
+              <span className="px-3 py-1 rounded-full bg-emerald-500 text-white font-bold text-xs flex items-center gap-1">
                 <CheckCircle className="w-3.5 h-3.5" />
                 O'zlashtirilgan
               </span>
@@ -212,6 +241,35 @@ export const TopicDetailView: React.FC = () => {
           <p className="text-slate-300 text-sm sm:text-base mt-3 leading-relaxed">
             {currentTopic.summary}
           </p>
+
+          {/* Quick Action Pills: Test, Game, BioBot */}
+          <div className="mt-6 pt-5 border-t border-white/10 flex items-center gap-2.5 flex-wrap">
+            <button
+              onClick={handleStartTopicTest}
+              className="px-4 py-2 rounded-xl bg-white text-slate-900 hover:bg-emerald-400 font-bold text-xs transition-colors flex items-center gap-1.5 shadow-sm"
+            >
+              <FileCheck2 className="w-4 h-4 text-emerald-600" />
+              Ushbu mavzu bo'yicha test topshirish
+            </button>
+
+            {topicGames.length > 0 && (
+              <button
+                onClick={() => openGame(topicGames[0].id)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-colors flex items-center gap-1.5 border border-white/10"
+              >
+                <Gamepad2 className="w-4 h-4 text-amber-400" />
+                Mavzuga oid o'yin ({topicGames[0].title})
+              </button>
+            )}
+
+            <button
+              onClick={() => handleAskBioBot()}
+              className="px-4 py-2 rounded-xl bg-emerald-500/30 hover:bg-emerald-500/50 text-emerald-200 font-bold text-xs transition-colors flex items-center gap-1.5 border border-emerald-400/30"
+            >
+              <Bot className="w-4 h-4" />
+              Mavzuni AI tushuntirsin
+            </button>
+          </div>
         </div>
       </div>
 
@@ -233,7 +291,7 @@ export const TopicDetailView: React.FC = () => {
         </ul>
       </div>
 
-      {/* 🖼️ Mavzuga Oid Sifatli Rasm & Diagramma (Sections 5-7 in Prompt) */}
+      {/* 🖼️ Mavzuga Oid Sifatli Rasm & Diagramma */}
       <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 sm:p-8 border border-slate-200 dark:border-slate-800 shadow-sm text-center">
         <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800 text-left">
           <div>
@@ -241,7 +299,7 @@ export const TopicDetailView: React.FC = () => {
               Mavzuning Ilmiy Tasviri
             </span>
             <h3 className="text-lg font-bold text-slate-900 dark:text-white mt-0.5">
-              🖼️ {currentTopic.title} tuzilishi
+              🖼️ {currentTopic.title} ilmiy diagrammasi
             </h3>
           </div>
           <button
@@ -283,7 +341,7 @@ export const TopicDetailView: React.FC = () => {
       </div>
 
       {/* 📖 Mavzuni O'rganish - Text Sections */}
-      <div className="space-y-8">
+      <div className="space-y-6">
         {currentTopic.sections.map((sec, secIdx) => (
           <div
             key={secIdx}
@@ -337,7 +395,7 @@ export const TopicDetailView: React.FC = () => {
         <InteractiveDiagramViewer data={currentTopic.diagram} />
       )}
 
-      {/* 🎮 SHU MAVZUGA OID O'YINLAR (Section 55 in User Prompt) */}
+      {/* 🎮 SHU MAVZUGA OID O'YINLAR */}
       <div className="bg-gradient-to-br from-emerald-500/10 via-teal-500/5 to-transparent rounded-3xl p-6 sm:p-8 border border-emerald-200 dark:border-emerald-800/60 shadow-sm">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2.5">
@@ -347,7 +405,7 @@ export const TopicDetailView: React.FC = () => {
                 SHU MAVZUGA OID O'YINLAR
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                O'rganilgan ma'lumotlarni o'yin shaklida mustahkamlang va XP oling
+                O'rganilgan ma'lumotlarni o'yin shaklida mustahkamlang va XP to'plang
               </p>
             </div>
           </div>
@@ -376,14 +434,14 @@ export const TopicDetailView: React.FC = () => {
         </div>
       </div>
 
-      {/* 📝 O'ZINGIZNI SINAB KO'RING (5-10 ta turli xil savollar) */}
+      {/* 📝 O'ZINGIZNI SINAB KO'RING (Interaktiv savollar) */}
       <QuickQuizSection
-        questions={currentTopic.quickQuestions}
+        questions={currentTopic.quickQuestions || currentTopic.questions || []}
         topicId={currentTopic.id}
         onFinished={handleFinishLesson}
       />
 
-      {/* 🎉 Dars Yakuni Kartochkasi */}
+      {/* 🎉 Dars Yakuni Kartochkasi & Navigatsiya */}
       <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 text-white rounded-3xl p-6 sm:p-10 border border-emerald-500/20 shadow-xl">
         <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="text-center sm:text-left">
@@ -394,7 +452,7 @@ export const TopicDetailView: React.FC = () => {
               🎉 Dars yakunlandi!
             </h3>
             <p className="text-slate-300 text-sm mt-1 max-w-md">
-              Siz "{currentTopic.title}" mavzusini o'rgandingiz. Bilimingizni mustahkamlash uchun o'yinlar yoki test markazidan foydalaning!
+              Siz "{currentTopic.title}" darsini o'rgandingiz. Bilimingizni mustahkamlash uchun o'yinlar yoki test markazidan foydalaning!
             </p>
           </div>
 
@@ -413,45 +471,58 @@ export const TopicDetailView: React.FC = () => {
                 Mavzu o'zlashtirilgan
               </div>
             )}
-
-            {nextTopic && (
-              <button
-                onClick={() => openTopic(nextTopic.id)}
-                className="px-6 py-3.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white font-bold text-sm transition-all flex items-center justify-center gap-2 border border-white/10"
-              >
-                Keyingi mavzu
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            )}
           </div>
         </div>
 
+        {/* Previous & Next Topic Controls (strictly within the SAME grade) */}
+        <div className="mt-8 pt-6 border-t border-slate-700/60 flex items-center justify-between gap-3">
+          {prevTopic ? (
+            <button
+              onClick={() => openTopic(prevTopic.id)}
+              className="px-4 py-2.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs transition-colors flex items-center gap-2"
+            >
+              <ChevronLeft className="w-4 h-4" />
+              Oldingi dars: {prevTopic.title}
+            </button>
+          ) : <div />}
+
+          {nextTopic && (
+            <button
+              onClick={() => openTopic(nextTopic.id)}
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors flex items-center gap-2 shadow-sm"
+            >
+              Keyingi dars: {nextTopic.title}
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          )}
+        </div>
+
         {/* Quick Shortcut Buttons */}
-        <div className="mt-8 pt-6 border-t border-slate-700/60 grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
           <button
             onClick={() => setActiveView('games')}
             className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-left transition-colors flex items-center gap-3 border border-white/5"
           >
             <span className="text-2xl">🎮</span>
             <div>
-              <span className="text-xs text-slate-400 block font-medium">O'rganilgan mavzudan</span>
+              <span className="text-xs text-slate-400 block font-medium">Barcha o'yinlar</span>
               <span className="text-sm font-bold text-white">Biologiya o'yinlari</span>
             </div>
           </button>
 
           <button
-            onClick={() => setActiveView('tests')}
+            onClick={handleStartTopicTest}
             className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-left transition-colors flex items-center gap-3 border border-white/5"
           >
             <span className="text-2xl">📝</span>
             <div>
-              <span className="text-xs text-slate-400 block font-medium">Bilimni baholash</span>
-              <span className="text-sm font-bold text-white">Test Markazi</span>
+              <span className="text-xs text-slate-400 block font-medium">Bilimni tekshirish</span>
+              <span className="text-sm font-bold text-white">Mavzu Testi</span>
             </div>
           </button>
 
           <button
-            onClick={handleAskBioBot}
+            onClick={() => handleAskBioBot()}
             className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-left transition-colors flex items-center gap-3 border border-white/5"
           >
             <span className="text-2xl">🤖</span>

@@ -80,9 +80,30 @@ export interface QuickQuestion {
   sequenceItems?: string[];
 }
 
+export interface Chapter {
+  id: string; // e.g. "8-chapter-1"
+  chapterNumber: number;
+  title: string;
+  icon?: string;
+  description?: string;
+  lessons: Topic[];
+}
+
+export interface GradeCourse {
+  gradeId: '8' | '9' | '10' | '11';
+  gradeNumber: GradeNumber;
+  gradeName: string;
+  subtitle: string;
+  icon: string;
+  description: string;
+  chapters: Chapter[];
+}
+
 export interface Topic {
-  id: string;
+  id: string; // e.g. "8-lesson-1-1"
   grade: GradeNumber;
+  gradeId?: '8' | '9' | '10' | '11';
+  chapterId?: string;
   chapterNumber: number;
   chapterTitle: string;
   orderNumber: number;
@@ -90,6 +111,8 @@ export interface Topic {
   icon: string;
   estimatedMinutes: number;
   summary: string;
+  description?: string;
+  content?: string;
   learningGoals: string[];
   sections: TopicSection[];
   imageUrl?: string;
@@ -97,6 +120,9 @@ export interface Topic {
   imageCaption?: string;
   diagram?: InteractiveDiagramData;
   quickQuestions: QuickQuestion[];
+  questions?: QuickQuestion[];
+  tests?: { id: string; title: string; questionCount: number; category?: string }[];
+  games?: { id: string; title: string; icon: string; xpReward: number }[];
   relatedGameIds?: string[];
 }
 
